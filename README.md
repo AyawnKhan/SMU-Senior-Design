@@ -42,31 +42,24 @@ This project builds a comprehensive framework to quantify model uncertainty and 
 - Owners: Walter Herrera & Jocelin Macias
 - We simulate a **Red Team (attack) / Blue Team (defense)** environment using frameworks such as [promptfoo](https://www.promptfoo.dev/docs/red-team/quickstart/) to develop and benchmark both attack strategies and defensive countermeasures.
 
----
-
-## 📦 Deliverables
-
-1. **This GitHub Repository** — Modular code for hallucination detection, prompt injection simulation, and defense mechanisms.
-2. **Project Report** — A formal paper detailing the correlation between UQ scores and hallucination rates, and the success rate of various prompt injection and defense mechanisms.
 
 ---
 
-## 🗂️ Repository Structure
+##  Repository Structure (TBA)
 
 ```
 SMU-Senior-Design/
 ├── hallucination/          # UQ methods and hallucination detection
-├── adversarial/            # Prompt injection attack simulations
-├── defense/                # Defense mechanism implementations
-├── data/                   # FinQA dataset utilities
-├── notebooks/              # Experiments and analysis
-├── reports/                # Project reports and documentation
+├── cybersecurity/          # Prompt injection simulations and defense implementations
+├── data/                   # FinQA/other datasets 
+├── reports/                # Project report and documentation
+├── requirements.txt        # Requirements and dependencies
 └── README.md
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ```bash
 # Clone the repository
@@ -75,11 +68,13 @@ cd SMU-Senior-Design
 
 # Install dependencies
 pip install -r requirements.txt
+
+TBA 
 ```
 
 ---
 
-## 📚 References
+## References
 
 | # | Resource |
 |---|----------|
@@ -89,6 +84,6 @@ pip install -r requirements.txt
 
 ---
 
-## 🏫 About
+## About
 
 This project is completed as part of the **SMU Lyle School of Engineering Senior Design Program**. The work focuses on two critical dimensions of LLM trustworthiness: **reliability** (hallucination detection) and **cybersecurity** (prompt injection defense).
