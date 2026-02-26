@@ -139,21 +139,26 @@ def call_openai_chat(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     from openai import OpenAI
     client = OpenAI()
 
-    #NOTE: The exact args depend on which OpenAI endpoint we use
-    #This wrapper is intentionally thin—adapt as needed.
-    resp = client.chat.completions.create(
-        model=cfg.model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        temperature=cfg.temperature,
-        top_p=cfg.top_p,
-        max_tokens=cfg.max_tokens,
-        #seed=cfg.seed,  # if supported by your chosen model/endpoint
-        #timeout=cfg.timeout_s,  # if your client supports timeouts
-    )
-    return resp.model_dump()  # nice serializable dict
+    #client call -- hugging face
+    messages = [
+    {"role": "system", "content": system},
+    {"role": "user", "content": user},
+]
+
+    if hasattr(client, "chat"):
+        resp = client.chat.completions.create(
+            model=cfg.model,
+            messages=messages,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+        )
+    else:
+        resp = client.chat_completion(
+            model=cfg.model,
+            messages=messages,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+        )
 
 def call_mock(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     """
