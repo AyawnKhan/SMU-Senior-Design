@@ -1,1 +1,9 @@
-
+openai>=1.0.0
+datasets
+pandas
+matplotlib
+transformers
+torch
+sentencepiece
+python-dotenv
+huggingface_hub>=0.24.5

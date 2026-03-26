@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Callable
 @dataclass
 class LLMConfig:
     provider: str = "openai"          # "openai"
-    model: str = "gpt-o"       # change to other models as needed 
+    model: str = "gpt-4o-mini"  # change to other models as needed 
     temperature: float = 0.2
     max_tokens: int = 512
     top_p: float = 1.0
@@ -117,15 +117,17 @@ class SimpleDiskCache:
 #Retry / backoff
 
 def with_retries(fn: Callable[[], Dict[str, Any]], max_retries: int = 4) -> Dict[str, Any]:
+    last_exception = None
     for attempt in range(max_retries + 1):
         try:
             return fn()
         except Exception as e:
+            last_exception = e
             if attempt == max_retries:
-                raise
-            #exponential backoff + jitter
+                break
             sleep_s = (2 ** attempt) + random.random()
             time.sleep(sleep_s)
+    raise last_exception if last_exception else RuntimeError("with_retries failed")
 
 
 #Provider implementations
@@ -139,26 +141,18 @@ def call_openai_chat(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     from openai import OpenAI
     client = OpenAI()
 
-    #client call -- hugging face
     messages = [
-    {"role": "system", "content": system},
-    {"role": "user", "content": user},
-]
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
 
-    if hasattr(client, "chat"):
-        resp = client.chat.completions.create(
-            model=cfg.model,
-            messages=messages,
-            temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
-        )
-    else:
-        resp = client.chat_completion(
-            model=cfg.model,
-            messages=messages,
-            temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
-        )
+    resp = client.chat.completions.create(
+        model=cfg.model,
+        messages=messages,
+        temperature=cfg.temperature,
+        max_tokens=cfg.max_tokens,
+    )
+    return resp.model_dump()
 
 def call_mock(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     """
