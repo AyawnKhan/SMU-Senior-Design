@@ -1,5 +1,6 @@
 
 from __future__ import annotations
+from dotenv import load_dotenv
 
 import os
 import json
@@ -12,6 +13,11 @@ from dataclasses import dataclass, asdict
 
 import numpy as np
 import pandas as pd
+
+import os
+
+load_dotenv()
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
 from LLM_utils import (
     LLMConfig, LLMRequest, LLMResponse,
