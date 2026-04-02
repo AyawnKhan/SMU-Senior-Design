@@ -17,7 +17,8 @@ import pandas as pd
 import os
 
 load_dotenv()
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+if os.getenv("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
 from LLM_utils import (
     LLMConfig, LLMRequest, LLMResponse,
@@ -149,7 +150,7 @@ def call_with_logprobs(system: str, user: str, cfg: LLMConfig, top_logprobs: int
 
 def compute_token_metrics(logprobs_data: List[Dict[str, Any]]) -> Dict[str, Optional[float]]:
     if not logprobs_data:
-        return {"mean_logprob": None, "mean_prob": None, "mean_entropy": None, "confidence": None}
+        return {"mean_logprob": None, "mean_prob": None, "mean_entropy": None, "confidence": None, "energy": None}
 
     logprobs = []
     entropies = []
@@ -172,15 +173,18 @@ def compute_token_metrics(logprobs_data: List[Dict[str, Any]]) -> Dict[str, Opti
     mean_entropy = sum(entropies) / len(entropies) if entropies else None
 
     confidence = None
+    energy = None
     if mean_entropy is not None:
         max_entropy = math.log(5)
         confidence = max(0.0, min(1.0, 1.0 - mean_entropy / max_entropy))
+        energy = -mean_lp if mean_lp is not None else None
 
     return {
         "mean_logprob": round(mean_lp, 4) if mean_lp is not None else None,
         "mean_prob": round(mean_prob, 4) if mean_prob is not None else None,
         "mean_entropy": round(mean_entropy, 6) if mean_entropy is not None else None,
         "confidence": round(confidence, 4) if confidence is not None else None,
+        "energy": round(energy, 4) if energy is not None else None,
     }
 
 
@@ -250,6 +254,7 @@ def run_single_example_optimized(
     result["tp_confidence"] = token_metrics.get("mean_prob")
     result["entropy_confidence"] = token_metrics.get("confidence")
     result["entropy_mean"] = token_metrics.get("mean_entropy")
+    result["energy_score"] = token_metrics.get("energy")
 
     cache_key_sc = cache.make_key(user_prompt, model_name, 0.7, "sc") if cache else ""
     if use_cache and cache and cache_key_sc:
@@ -347,21 +352,212 @@ def run_uq_experiment(
     return df
 
 
-def calibration_analysis(df: pd.DataFrame, threshold: float = 0.7) -> pd.DataFrame:
-    methods = [
-        ("sc_confidence", "Self-Consistency"),
-        ("tp_confidence", "Token Probability"),
-        ("entropy_confidence", "Entropy"),
-        ("vc_confidence", "Verbalized"),
-    ]
+UQ_METHODS = [
+    ("sc_confidence", "Self-Consistency", True),
+    ("tp_confidence", "Token Probability", True),
+    ("entropy_confidence", "Entropy Confidence", True),
+    ("vc_confidence", "Verbalized Confidence", True),
+    ("energy_score", "Energy Score", False),
+]
 
+
+def compute_auroc(df: pd.DataFrame, confidence_col: str, label_col: str = "correct") -> Optional[Dict[str, float]]:
+    from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
+    
+    valid = df.dropna(subset=[confidence_col, label_col])
+    if len(valid) < 2:
+        return None
+
+    labels = valid[label_col].values.astype(int)
+    scores = valid[confidence_col].values
+
+    if len(np.unique(labels)) < 2:
+        return None
+
+    try:
+        auroc = roc_auc_score(labels, scores)
+        fpr, tpr, roc_thresholds = roc_curve(labels, scores)
+        precision, recall, prc_thresholds = precision_recall_curve(labels, scores)
+        auprc = average_precision_score(labels, scores)
+        
+        return {
+            "auroc": round(auroc, 4),
+            "auprc": round(auprc, 4),
+            "fpr": fpr.tolist(),
+            "tpr": tpr.tolist(),
+            "precision": precision.tolist(),
+            "recall": recall.tolist(),
+        }
+    except Exception as e:
+        print(f"  [AUROC Error] {confidence_col}: {e}")
+        return None
+
+
+def compute_all_auroc(df: pd.DataFrame) -> pd.DataFrame:
+    results = []
+    for col, label, higher_is_better in UQ_METHODS:
+        auroc_data = compute_auroc(df, col)
+        if auroc_data:
+            results.append({
+                "Method": label,
+                "AUROC": auroc_data["auroc"],
+                "AUPRC": auroc_data["auprc"],
+                "Higher=Confident": higher_is_better,
+                "Detection Ability": "Good" if auroc_data["auroc"] >= 0.7 else ("Moderate" if auroc_data["auroc"] >= 0.6 else "Poor"),
+            })
+    
+    return pd.DataFrame(results).set_index("Method") if results else pd.DataFrame()
+
+
+def plot_roc_curves(df: pd.DataFrame, save_path: str):
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import roc_curve
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    
+    for col, label, higher_is_better in UQ_METHODS:
+        valid = df.dropna(subset=[col, "correct"])
+        if len(valid) < 2:
+            continue
+            
+        labels = valid["correct"].values.astype(int)
+        scores = valid[col].values
+        
+        try:
+            fpr, tpr, _ = roc_curve(labels, scores)
+            auroc = compute_auroc(df, col)
+            auroc_val = auroc["auroc"] if auroc else 0.5
+            ax.plot(fpr, tpr, label=f"{label} (AUROC={auroc_val:.3f})", linewidth=2)
+        except Exception:
+            continue
+    
+    ax.plot([0, 1], [0, 1], "k--", label="Random (AUROC=0.500)", alpha=0.5)
+    ax.set_xlabel("False Positive Rate", fontsize=12)
+    ax.set_ylabel("True Positive Rate", fontsize=12)
+    ax.set_title("ROC Curves for Hallucination Detection\n(Higher curve = better separation)", fontsize=14)
+    ax.legend(loc="lower right")
+    ax.set_xlim([-0.02, 1.02])
+    ax.set_ylim([-0.02, 1.02])
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect("equal")
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    print(f"Saved: {save_path}")
+
+
+def plot_confidence_distributions(df: pd.DataFrame, save_path: str):
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.flatten()
+    
+    for idx, (col, label, higher_is_better) in enumerate(UQ_METHODS):
+        if idx >= len(axes):
+            break
+            
+        ax = axes[idx]
+        valid = df.dropna(subset=[col, "correct"])
+        if valid.empty:
+            ax.set_title(f"{label}\n(no data)")
+            continue
+        
+        correct_conf = valid[valid["correct"] == 1.0][col].values
+        incorrect_conf = valid[valid["correct"] == 0.0][col].values
+        
+        bins = np.linspace(0, 1, 20) if higher_is_better else np.linspace(0, max(5, valid[col].max() if not valid[col].isna().all() else 5), 20)
+        
+        if len(correct_conf) > 0:
+            ax.hist(correct_conf, bins=bins, alpha=0.6, label=f"Correct (n={len(correct_conf)})", color="green", density=True)
+        if len(incorrect_conf) > 0:
+            ax.hist(incorrect_conf, bins=bins, alpha=0.6, label=f"Incorrect (n={len(incorrect_conf)})", color="red", density=True)
+        
+        ax.set_title(f"{label}\n{'Higher → Confident' if higher_is_better else 'Lower → Confident'}")
+        ax.set_xlabel("Confidence Score" if higher_is_better else "Uncertainty Score")
+        ax.set_ylabel("Density")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+    
+    for idx in range(len(UQ_METHODS), len(axes)):
+        axes[idx].axis("off")
+    
+    plt.suptitle("Confidence Distribution: Correct vs Incorrect Answers\n(Overlap = harder to detect hallucinations)", fontsize=14)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    print(f"Saved: {save_path}")
+
+
+def plot_calibration_curves(df: pd.DataFrame, save_path: str):
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.flatten()
+    
+    for idx, (col, label, higher_is_better) in enumerate(UQ_METHODS):
+        if idx >= len(axes):
+            break
+            
+        ax = axes[idx]
+        valid = df.dropna(subset=[col, "correct"])
+        if valid.empty or len(valid) < 3:
+            ax.set_title(f"{label}\n(not enough data)")
+            continue
+        
+        n_bins = min(5, len(valid) // 2)
+        valid = valid.copy()
+        
+        if higher_is_better:
+            valid["bin"] = pd.qcut(valid[col], q=n_bins, duplicates="drop")
+        else:
+            valid["bin"] = pd.qcut(valid[col], q=n_bins, duplicates="drop")
+        
+        grouped = valid.groupby("bin", observed=True).agg(
+            accuracy=("correct", "mean"),
+            confidence=(col, "mean"),
+            count=("correct", "count")
+        ).reset_index()
+        
+        x = range(len(grouped))
+        ax.bar(x, grouped["accuracy"].values, width=0.35, label="Actual Accuracy", color="steelblue", alpha=0.7)
+        ax.plot(x, grouped["confidence"].values, "ro-", label="Mean Confidence", linewidth=2, markersize=8)
+        
+        ax.set_title(label)
+        ax.set_xlabel("Bins (sorted by confidence)")
+        ax.set_ylabel("Value")
+        ax.legend(fontsize=8)
+        ax.set_ylim([0, 1.1])
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"{i+1}\n(n={int(c)})" for i, c in enumerate(grouped["count"].values)], fontsize=8)
+        ax.grid(True, alpha=0.3)
+        
+        ax.plot([-0.5, len(grouped) - 0.5], [0, 1], "g--", alpha=0.3, label="Perfect calibration")
+    
+    for idx in range(len(UQ_METHODS), len(axes)):
+        axes[idx].axis("off")
+    
+    plt.suptitle("Calibration Curves: Confidence vs Actual Accuracy\n(Closer to diagonal = better calibrated)", fontsize=14)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    print(f"Saved: {save_path}")
+
+
+def calibration_analysis(df: pd.DataFrame, threshold: float = 0.7) -> pd.DataFrame:
     rows_summary = []
-    for col, label in methods:
+    for col, label, higher_is_better in UQ_METHODS:
         sub = df.dropna(subset=[col])
         if sub.empty:
             continue
-        hi = sub[sub[col] >= threshold]
-        lo = sub[sub[col] < threshold]
+        
+        if higher_is_better:
+            hi = sub[sub[col] >= threshold]
+            lo = sub[sub[col] < threshold]
+        else:
+            hi = sub[sub[col] <= 0.3]
+            lo = sub[sub[col] > 0.3]
+        
         rows_summary.append({
             "Method": label,
             "High-conf (n)": len(hi),
@@ -370,30 +566,11 @@ def calibration_analysis(df: pd.DataFrame, threshold: float = 0.7) -> pd.DataFra
             "Low-conf acc": f"{lo['correct'].mean():.1%}" if len(lo) > 0 else "N/A",
         })
 
-    return pd.DataFrame(rows_summary).set_index("Method")
-
-
-def compute_calibration_curve(df: pd.DataFrame, col: str, n_bins: int = 5):
-    sub = df.dropna(subset=[col, "correct"])
-    if sub.empty:
-        return np.array([]), np.array([]), np.array([])
-
-    sub = sub.copy()
-    sub["bin"] = pd.cut(sub[col], bins=n_bins, duplicates="drop")
-    grouped = sub.groupby("bin", observed=True).agg(
-        avg_confidence=("correct", "mean"),
-        accuracy=(col, "mean"),
-        count=("correct", "count")
-    )
-    return (
-        np.array(grouped["avg_confidence"]),
-        np.array(grouped["accuracy"]),
-        np.array(grouped["count"])
-    )
+    return pd.DataFrame(rows_summary).set_index("Method") if rows_summary else pd.DataFrame()
 
 
 def results_to_numpy(results: List[Dict[str, Any]]) -> np.ndarray:
-    fields = ["correct", "sc_confidence", "tp_confidence", "entropy_confidence", "vc_confidence"]
+    fields = ["correct", "sc_confidence", "tp_confidence", "entropy_confidence", "vc_confidence", "energy_score"]
     arr = np.zeros((len(results), len(fields)))
     for i, r in enumerate(results):
         for j, f in enumerate(fields):
@@ -427,43 +604,44 @@ if __name__ == "__main__":
 
     arr = results_to_numpy(results.to_dict("records"))
     np.save(f"{RUN_DIR}/results_numpy.npy", arr)
-
     print(f"\nNumpy array shape: {arr.shape}")
-    print(f"Columns: correct, sc_conf, tp_conf, entropy_conf, vc_conf")
+    print(f"Columns: correct, sc_conf, tp_conf, entropy_conf, vc_conf, energy")
 
-    print("\n=== Calibration Analysis ===")
+    print("\n" + "="*60)
+    print("AUROC ANALYSIS - Hallucination Detection Ability")
+    print("="*60)
+    print("Interpretation:")
+    print("  AUROC = 0.50: Random (cannot detect hallucinations)")
+    print("  AUROC = 0.60: Weak signal")
+    print("  AUROC = 0.70: Moderate (useful for filtering)")
+    print("  AUROC = 0.80: Good (reliable detection)")
+    print("  AUROC = 0.90+: Excellent")
+    print("-"*60)
+    
+    auroc_table = compute_all_auroc(results)
+    if not auroc_table.empty:
+        print(auroc_table.to_string())
+        auroc_table.to_csv(f"{RUN_DIR}/auroc_analysis.csv")
+        print(f"\nSaved: {RUN_DIR}/auroc_analysis.csv")
+    else:
+        print("Not enough data to compute AUROC (need both correct and incorrect examples)")
+
+    print("\n" + "="*60)
+    print("CALIBRATION ANALYSIS - Threshold-based")
+    print("="*60)
     cal_table = calibration_analysis(results)
-    print(cal_table)
-    cal_table.to_csv(f"{RUN_DIR}/calibration_table.csv")
+    if not cal_table.empty:
+        print(cal_table.to_string())
+        cal_table.to_csv(f"{RUN_DIR}/calibration_table.csv")
+        print(f"\nSaved: {RUN_DIR}/calibration_table.csv")
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    methods = [
-        ("sc_confidence", "Self-Consistency"),
-        ("tp_confidence", "Token Probability"),
-        ("entropy_confidence", "Entropy"),
-        ("vc_confidence", "Verbalized Confidence"),
-    ]
-
-    for ax, (col, label) in zip(axes.flat, methods):
-        conf_bins, acc_bins, counts = compute_calibration_curve(results, col)
-        if len(conf_bins) > 0:
-            x = range(len(conf_bins))
-            ax.bar(x, acc_bins, color="steelblue", alpha=0.7, label="Accuracy")
-            ax.plot(x, conf_bins, "ro-", label="Confidence")
-            ax.set_title(label)
-            ax.set_xlabel("Bin")
-            ax.set_ylabel("Value")
-            ax.legend()
-            ax.set_ylim(0, 1.1)
-            ax.set_xticks(x)
-            ax.set_xticklabels([f"{c:.0%}" for c in conf_bins], rotation=45)
-        else:
-            ax.set_title(f"{label}\n(no data)")
-
-    plt.suptitle(f"UQ Calibration | {RUN_TIMESTAMP}", fontsize=14)
-    plt.tight_layout()
-    plt.savefig(f"{RUN_DIR}/calibration_curves.png", dpi=150)
-    print(f"\nSaved: {RUN_DIR}/calibration_curves.png")
+    print("\n" + "="*60)
+    print("GENERATING VISUALIZATIONS...")
+    print("="*60)
+    
+    plot_roc_curves(results, f"{RUN_DIR}/roc_curves.png")
+    plot_confidence_distributions(results, f"{RUN_DIR}/confidence_distributions.png")
+    plot_calibration_curves(results, f"{RUN_DIR}/calibration_curves.png")
 
     results.to_csv(f"{RUN_DIR}/results_dataframe.csv", index=False)
     print(f"Saved: {RUN_DIR}/results_dataframe.csv")
@@ -477,11 +655,20 @@ if __name__ == "__main__":
         "mean_tp_confidence": float(results["tp_confidence"].mean()),
         "mean_entropy_confidence": float(results["entropy_confidence"].mean()),
         "mean_vc_confidence": float(results["vc_confidence"].mean()),
+        "mean_energy_score": float(results["energy_score"].mean()),
         "total_samples": len(results),
+        "correct_count": int(results["correct"].sum()),
+        "incorrect_count": int((1 - results["correct"]).sum()),
         "total_api_calls": len(results) * (1 + N_SC_SAMPLES + 1),
     }
+    
+    if not auroc_table.empty:
+        for _, row in auroc_table.iterrows():
+            summary[f"auroc_{row.name.replace(' ', '_').lower()}"] = row["AUROC"]
+            summary[f"auprc_{row.name.replace(' ', '_').lower()}"] = row["AUPRC"]
+    
     with open(f"{RUN_DIR}/run_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved: {RUN_DIR}/run_summary.json")
-    print(f"\nEstimated API calls: ~{summary['total_api_calls']} (baseline + SC + verbalized)")
+    print(f"\nEstimated API calls: ~{summary['total_api_calls']}")
     print(f"\n=== Run Complete ===")

@@ -5,6 +5,7 @@ transformers
 torch
 sentencepiece
 huggingface_hub>=0.24.5
+scikit-learn
 
 openai>=1.30.0
 python-dotenv>=1.0.0
