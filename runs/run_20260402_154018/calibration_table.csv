@@ -1,0 +1,6 @@
+Method,High-conf (n),High-conf acc,Low-conf (n),Low-conf acc
+Self-Consistency,5,80.0%,5,40.0%
+Token Probability,10,60.0%,0,N/A
+Entropy Confidence,10,60.0%,0,N/A
+Verbalized Confidence,0,N/A,10,60.0%
+Energy Score,10,60.0%,0,N/A

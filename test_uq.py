@@ -3,6 +3,7 @@ from __future__ import annotations
 from dotenv import load_dotenv
 
 import os
+import sys
 import json
 import re
 import math
@@ -37,7 +38,7 @@ MODELS: Dict[str, LLMConfig] = {
 SELECTED_MODEL = "gpt-4o-mini"
 RUN_SEED = 42
 N_SC_SAMPLES = 3
-MAX_ROWS = 10
+MAX_ROWS = 100
 USE_CACHE = False
 
 RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -130,7 +131,10 @@ def call_with_logprobs(system: str, user: str, cfg: LLMConfig, top_logprobs: int
         return "MOCK_RESPONSE", {"logprobs": [], "usage": {}}
 
     from openai import OpenAI
-    client = OpenAI()
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not set. Please set it in your environment.")
+    client = OpenAI(api_key=api_key)
 
     def _call():
         return client.chat.completions.create(
@@ -142,10 +146,14 @@ def call_with_logprobs(system: str, user: str, cfg: LLMConfig, top_logprobs: int
             top_logprobs=top_logprobs,
         )
 
-    resp = with_retries(_call, max_retries=cfg.max_retries)
-    raw_dict = resp if isinstance(resp, dict) else resp.model_dump()
-    text = raw_dict["choices"][0]["message"]["content"]
-    return text, raw_dict
+    try:
+        resp = with_retries(_call, max_retries=cfg.max_retries)
+        raw_dict = resp if isinstance(resp, dict) else resp.model_dump()
+        text = raw_dict["choices"][0]["message"]["content"]
+        return text, raw_dict
+    except Exception as e:
+        print(f"    [API ERROR] {type(e).__name__}: {e}")
+        raise
 
 
 def compute_token_metrics(logprobs_data: List[Dict[str, Any]]) -> Dict[str, Optional[float]]:
@@ -343,9 +351,10 @@ def run_uq_experiment(
             status = "✓" if r["correct"] else "✗"
             print(f"  {status} Correct={bool(r['correct'])} | SC={r['sc_confidence']} | TP={r['tp_confidence']} | Ent={r['entropy_confidence']} | VC={r['vc_confidence']}")
         except Exception as e:
-            print(f"  [ERROR] {row['id']}: {e}")
+            print(f"  [ERROR] {row['id']}: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
+            continue
 
     df = pd.DataFrame(all_results)
     print(f"\n=== Experiment Complete | {len(df)} examples processed ===")
@@ -357,7 +366,6 @@ UQ_METHODS = [
     ("tp_confidence", "Token Probability", True),
     ("entropy_confidence", "Entropy Confidence", True),
     ("vc_confidence", "Verbalized Confidence", True),
-    ("energy_score", "Energy Score", False),
 ]
 
 
@@ -413,34 +421,64 @@ def plot_roc_curves(df: pd.DataFrame, save_path: str):
     import matplotlib.pyplot as plt
     from sklearn.metrics import roc_curve
 
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    axes = axes.flatten()
     
-    for col, label, higher_is_better in UQ_METHODS:
+    colors = ['#2ecc71', '#3498db', '#9b59b6', '#e74c3c']
+    
+    for idx, (col, label, higher_is_better) in enumerate(UQ_METHODS):
+        if idx >= len(axes):
+            break
+        
+        ax = axes[idx]
         valid = df.dropna(subset=[col, "correct"])
         if len(valid) < 2:
+            ax.set_title(f"{label}\n(not enough data)")
             continue
             
         labels = valid["correct"].values.astype(int)
         scores = valid[col].values
         
         try:
-            fpr, tpr, _ = roc_curve(labels, scores)
-            auroc = compute_auroc(df, col)
-            auroc_val = auroc["auroc"] if auroc else 0.5
-            ax.plot(fpr, tpr, label=f"{label} (AUROC={auroc_val:.3f})", linewidth=2)
-        except Exception:
-            continue
+            fpr, tpr, thresholds = roc_curve(labels, scores)
+            auroc_data = compute_auroc(df, col)
+            auroc_val = auroc_data["auroc"] if auroc_data else 0.5
+            auroc_std = 0.05
+            
+            ax.plot(fpr, tpr, color=colors[idx], linewidth=2.5, label=f"AUROC = {auroc_val:.3f}")
+            ax.fill_between(fpr, tpr, alpha=0.2, color=colors[idx])
+            ax.plot([0, 1], [0, 1], "k--", alpha=0.5, linewidth=1)
+            
+            ax.set_title(f"{label}", fontsize=12, fontweight='bold')
+            ax.set_xlabel("False Positive Rate", fontsize=10)
+            ax.set_ylabel("True Positive Rate", fontsize=10)
+            ax.legend(loc="lower right", fontsize=10)
+            ax.set_xlim([-0.02, 1.02])
+            ax.set_ylim([-0.02, 1.02])
+            ax.grid(True, alpha=0.3)
+            ax.set_aspect("equal")
+            
+            if auroc_val >= 0.7:
+                status_color = '#27ae60'
+                status = "Good Detection"
+            elif auroc_val >= 0.6:
+                status_color = '#f39c12'
+                status = "Moderate"
+            else:
+                status_color = '#e74c3c'
+                status = "Poor"
+            
+            ax.text(0.98, 0.02, status, transform=ax.transAxes, fontsize=10, 
+                   ha='right', va='bottom', color=status_color, fontweight='bold',
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+        except Exception as e:
+            ax.set_title(f"{label}\n(Error: {str(e)[:30]})")
     
-    ax.plot([0, 1], [0, 1], "k--", label="Random (AUROC=0.500)", alpha=0.5)
-    ax.set_xlabel("False Positive Rate", fontsize=12)
-    ax.set_ylabel("True Positive Rate", fontsize=12)
-    ax.set_title("ROC Curves for Hallucination Detection\n(Higher curve = better separation)", fontsize=14)
-    ax.legend(loc="lower right")
-    ax.set_xlim([-0.02, 1.02])
-    ax.set_ylim([-0.02, 1.02])
-    ax.grid(True, alpha=0.3)
-    ax.set_aspect("equal")
+    for idx in range(len(UQ_METHODS), len(axes)):
+        axes[idx].axis("off")
     
+    plt.suptitle("ROC Curves for Hallucination Detection\n(Higher = Better at separating correct from incorrect)", fontsize=14)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close()
@@ -450,7 +488,7 @@ def plot_roc_curves(df: pd.DataFrame, save_path: str):
 def plot_confidence_distributions(df: pd.DataFrame, save_path: str):
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     axes = axes.flatten()
     
     for idx, (col, label, higher_is_better) in enumerate(UQ_METHODS):
@@ -466,33 +504,70 @@ def plot_confidence_distributions(df: pd.DataFrame, save_path: str):
         correct_conf = valid[valid["correct"] == 1.0][col].values
         incorrect_conf = valid[valid["correct"] == 0.0][col].values
         
-        bins = np.linspace(0, 1, 20) if higher_is_better else np.linspace(0, max(5, valid[col].max() if not valid[col].isna().all() else 5), 20)
+        if len(correct_conf) == 0 or len(incorrect_conf) == 0:
+            ax.set_title(f"{label}\n(not enough classes)")
+            continue
         
-        if len(correct_conf) > 0:
-            ax.hist(correct_conf, bins=bins, alpha=0.6, label=f"Correct (n={len(correct_conf)})", color="green", density=True)
-        if len(incorrect_conf) > 0:
-            ax.hist(incorrect_conf, bins=bins, alpha=0.6, label=f"Incorrect (n={len(incorrect_conf)})", color="red", density=True)
+        all_vals = np.concatenate([correct_conf, incorrect_conf])
+        min_val = np.nanmin(all_vals)
+        max_val = np.nanmax(all_vals)
+        n_bins = 20
+        bin_width = (max_val - min_val) / n_bins
+        bins = np.linspace(min_val, max_val, n_bins + 1)
         
-        ax.set_title(f"{label}\n{'Higher → Confident' if higher_is_better else 'Lower → Confident'}")
-        ax.set_xlabel("Confidence Score" if higher_is_better else "Uncertainty Score")
+        if higher_is_better:
+            ax.hist(incorrect_conf, bins=bins, alpha=0.7, label=f"Incorrect (n={len(incorrect_conf)})", color="#e74c3c", density=True, edgecolor='white')
+            ax.hist(correct_conf, bins=bins, alpha=0.7, label=f"Correct (n={len(correct_conf)})", color="#27ae60", density=True, edgecolor='white')
+            ax.set_xlabel("Confidence Score (Low → High)", fontsize=10)
+            ax.annotate("INCORRECT\n(Low Confidence)", xy=(0.02, 0.95), xycoords='axes fraction', 
+                       fontsize=9, color='#e74c3c', ha='left', va='top', fontweight='bold')
+            ax.annotate("CORRECT\n(High Confidence)", xy=(0.98, 0.95), xycoords='axes fraction', 
+                       fontsize=9, color='#27ae60', ha='right', va='top', fontweight='bold')
+        else:
+            ax.hist(correct_conf, bins=bins, alpha=0.7, label=f"Correct (n={len(correct_conf)})", color="#27ae60", density=True, edgecolor='white')
+            ax.hist(incorrect_conf, bins=bins, alpha=0.7, label=f"Incorrect (n={len(incorrect_conf)})", color="#e74c3c", density=True, edgecolor='white')
+            ax.set_xlabel("Uncertainty Score", fontsize=10)
+        
+        overlap_score = compute_overlap_score(correct_conf, incorrect_conf, bins)
+        
+        ax.set_title(f"{label}\nOverlap Score: {overlap_score:.3f} (0=separate, 1=overlap)", fontsize=11)
         ax.set_ylabel("Density")
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=9, loc='upper right')
         ax.grid(True, alpha=0.3)
+        ax.set_xlim(min_val - bin_width, max_val + bin_width)
     
     for idx in range(len(UQ_METHODS), len(axes)):
         axes[idx].axis("off")
     
-    plt.suptitle("Confidence Distribution: Correct vs Incorrect Answers\n(Overlap = harder to detect hallucinations)", fontsize=14)
+    plt.suptitle("Confidence Distribution: Correct vs Incorrect Answers\n(Green=Correct, Red=Incorrect | Ideal: Green right, Red left)", fontsize=14)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close()
     print(f"Saved: {save_path}")
 
 
+def compute_overlap_score(correct_conf: np.ndarray, incorrect_conf: np.ndarray, bins: np.ndarray) -> float:
+    if len(correct_conf) == 0 or len(incorrect_conf) == 0:
+        return 0.0
+    
+    correct_hist, _ = np.histogram(correct_conf, bins=bins, density=True)
+    incorrect_hist, _ = np.histogram(incorrect_conf, bins=bins, density=True)
+    
+    correct_hist = correct_hist / (correct_hist.sum() + 1e-10)
+    incorrect_hist = incorrect_hist / (incorrect_hist.sum() + 1e-10)
+    
+    overlap = np.sum(np.minimum(correct_hist, incorrect_hist))
+    max_overlap = np.sum(np.maximum(correct_hist, incorrect_hist))
+    
+    if max_overlap == 0:
+        return 0.0
+    return overlap / max_overlap
+
+
 def plot_calibration_curves(df: pd.DataFrame, save_path: str):
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     axes = axes.flatten()
     
     for idx, (col, label, higher_is_better) in enumerate(UQ_METHODS):
@@ -505,13 +580,17 @@ def plot_calibration_curves(df: pd.DataFrame, save_path: str):
             ax.set_title(f"{label}\n(not enough data)")
             continue
         
-        n_bins = min(5, len(valid) // 2)
-        valid = valid.copy()
+        n_bins = 20
+        min_val = valid[col].min()
+        max_val = valid[col].max()
+        bin_width = (max_val - min_val) / n_bins
         
         if higher_is_better:
-            valid["bin"] = pd.qcut(valid[col], q=n_bins, duplicates="drop")
+            valid["bin"] = pd.cut(valid[col], bins=n_bins, duplicates="drop")
+            sorted_bins = sorted(valid["bin"].dropna().unique())
         else:
-            valid["bin"] = pd.qcut(valid[col], q=n_bins, duplicates="drop")
+            valid["bin"] = pd.cut(valid[col], bins=n_bins, duplicates="drop")
+            sorted_bins = sorted(valid["bin"].dropna().unique())
         
         grouped = valid.groupby("bin", observed=True).agg(
             accuracy=("correct", "mean"),
@@ -519,25 +598,36 @@ def plot_calibration_curves(df: pd.DataFrame, save_path: str):
             count=("correct", "count")
         ).reset_index()
         
+        if len(grouped) == 0:
+            ax.set_title(f"{label}\n(no valid bins)")
+            continue
+        
         x = range(len(grouped))
-        ax.bar(x, grouped["accuracy"].values, width=0.35, label="Actual Accuracy", color="steelblue", alpha=0.7)
-        ax.plot(x, grouped["confidence"].values, "ro-", label="Mean Confidence", linewidth=2, markersize=8)
         
-        ax.set_title(label)
-        ax.set_xlabel("Bins (sorted by confidence)")
-        ax.set_ylabel("Value")
-        ax.legend(fontsize=8)
-        ax.set_ylim([0, 1.1])
+        ax.bar(x, grouped["accuracy"].values, width=0.6, label="Actual Accuracy", color="#3498db", alpha=0.8, edgecolor='white')
+        ax.plot(x, grouped["confidence"].values, "o-", color="#e74c3c", label="Mean Confidence", linewidth=2, markersize=6)
+        
+        ax.plot([-0.5, len(grouped) - 0.5], [0, 1], "g--", alpha=0.5, linewidth=1.5, label="Perfect Calibration")
+        ax.plot([-0.5, len(grouped) - 0.5], [0.5, 0.5], "k:", alpha=0.3, linewidth=1)
+        
+        ax.set_title(f"{label}", fontsize=12, fontweight='bold')
+        ax.set_xlabel("Bins (sorted by confidence)", fontsize=10)
+        ax.set_ylabel("Value (0-1)", fontsize=10)
+        ax.legend(fontsize=8, loc='upper left')
+        ax.set_ylim([0, 1.05])
         ax.set_xticks(x)
-        ax.set_xticklabels([f"{i+1}\n(n={int(c)})" for i, c in enumerate(grouped["count"].values)], fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.set_xticklabels([f"{i+1}" for i in range(len(grouped))], fontsize=8)
+        ax.grid(True, alpha=0.3, axis='y')
         
-        ax.plot([-0.5, len(grouped) - 0.5], [0, 1], "g--", alpha=0.3, label="Perfect calibration")
+        calibration_error = np.abs(grouped["accuracy"].values - grouped["confidence"].values).mean()
+        ax.text(0.98, 0.02, f"Cal Error: {calibration_error:.3f}", transform=ax.transAxes, 
+               fontsize=9, ha='right', va='bottom', 
+               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     for idx in range(len(UQ_METHODS), len(axes)):
         axes[idx].axis("off")
     
-    plt.suptitle("Calibration Curves: Confidence vs Actual Accuracy\n(Closer to diagonal = better calibrated)", fontsize=14)
+    plt.suptitle("Calibration Curves: Confidence vs Actual Accuracy\n(Closer to green line = better calibrated | 20 bins based on data range)", fontsize=14)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close()
@@ -570,7 +660,7 @@ def calibration_analysis(df: pd.DataFrame, threshold: float = 0.7) -> pd.DataFra
 
 
 def results_to_numpy(results: List[Dict[str, Any]]) -> np.ndarray:
-    fields = ["correct", "sc_confidence", "tp_confidence", "entropy_confidence", "vc_confidence", "energy_score"]
+    fields = ["correct", "sc_confidence", "tp_confidence", "entropy_confidence", "vc_confidence"]
     arr = np.zeros((len(results), len(fields)))
     for i, r in enumerate(results):
         for j, f in enumerate(fields):
@@ -585,10 +675,16 @@ def results_to_numpy(results: List[Dict[str, Any]]) -> np.ndarray:
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
+    api_key = os.getenv("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    
     print(f"=== UQ Experiment | Timestamp: {RUN_TIMESTAMP} ===")
     print(f"Output: {RUN_DIR}")
     print(f"Seed: {RUN_SEED}")
     print(f"Cache: {USE_CACHE}")
+    if api_key:
+        print(f"API Key: {api_key[:10]}...{api_key[-4:]}")
+    else:
+        print("ERROR: No API key found!")
     print("-" * 50)
 
     os.makedirs(RUN_DIR, exist_ok=True)
@@ -596,7 +692,7 @@ if __name__ == "__main__":
     results = run_uq_experiment(
         model_name="gpt-4o-mini",
         split="test",
-        max_rows=10,
+        max_rows=MAX_ROWS,
         n_sc=N_SC_SAMPLES,
         seed=RUN_SEED,
         use_cache=USE_CACHE,
@@ -605,7 +701,7 @@ if __name__ == "__main__":
     arr = results_to_numpy(results.to_dict("records"))
     np.save(f"{RUN_DIR}/results_numpy.npy", arr)
     print(f"\nNumpy array shape: {arr.shape}")
-    print(f"Columns: correct, sc_conf, tp_conf, entropy_conf, vc_conf, energy")
+    print(f"Columns: correct, sc_conf, tp_conf, entropy_conf, vc_conf")
 
     print("\n" + "="*60)
     print("AUROC ANALYSIS - Hallucination Detection Ability")
@@ -618,13 +714,34 @@ if __name__ == "__main__":
     print("  AUROC = 0.90+: Excellent")
     print("-"*60)
     
-    auroc_table = compute_all_auroc(results)
-    if not auroc_table.empty:
-        print(auroc_table.to_string())
-        auroc_table.to_csv(f"{RUN_DIR}/auroc_analysis.csv")
-        print(f"\nSaved: {RUN_DIR}/auroc_analysis.csv")
+    if results.empty:
+        print("\n[ERROR] No results generated. Check API key and connectivity.")
+        print("Exiting...")
+        exit(1)
+    
+    if "correct" not in results.columns or "sc_confidence" not in results.columns:
+        print(f"\n[ERROR] Unexpected DataFrame columns: {list(results.columns)}")
+        print("Results may be empty or malformed.")
+        print(results.head())
+        exit(1)
+    
+    correct_count = int(results["correct"].sum())
+    incorrect_count = len(results) - correct_count
+    print(f"\nResults: {len(results)} total | {correct_count} correct | {incorrect_count} incorrect")
+    
+    if incorrect_count == 0 or correct_count == 0:
+        print("\n[WARNING] AUROC requires both correct and incorrect examples.")
+        print("All answers were correct (or all incorrect) - cannot compute AUROC.")
+        print("Consider increasing MAX_ROWS or using a different seed.")
+        auroc_table = pd.DataFrame()
     else:
-        print("Not enough data to compute AUROC (need both correct and incorrect examples)")
+        auroc_table = compute_all_auroc(results)
+        if not auroc_table.empty:
+            print(auroc_table.to_string())
+            auroc_table.to_csv(f"{RUN_DIR}/auroc_analysis.csv")
+            print(f"\nSaved: {RUN_DIR}/auroc_analysis.csv")
+        else:
+            print("Not enough data to compute AUROC")
 
     print("\n" + "="*60)
     print("CALIBRATION ANALYSIS - Threshold-based")
@@ -655,7 +772,6 @@ if __name__ == "__main__":
         "mean_tp_confidence": float(results["tp_confidence"].mean()),
         "mean_entropy_confidence": float(results["entropy_confidence"].mean()),
         "mean_vc_confidence": float(results["vc_confidence"].mean()),
-        "mean_energy_score": float(results["energy_score"].mean()),
         "total_samples": len(results),
         "correct_count": int(results["correct"].sum()),
         "incorrect_count": int((1 - results["correct"]).sum()),
@@ -672,3 +788,104 @@ if __name__ == "__main__":
     print(f"Saved: {RUN_DIR}/run_summary.json")
     print(f"\nEstimated API calls: ~{summary['total_api_calls']}")
     print(f"\n=== Run Complete ===")
+
+
+def load_results_from_jsonl(jsonl_path: str) -> pd.DataFrame:
+    results = []
+    with open(jsonl_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                results.append(json.loads(line))
+    return pd.DataFrame(results)
+
+
+def generate_graphs_from_results(results_path: str, output_dir: str = None):
+    if output_dir is None:
+        output_dir = os.path.dirname(results_path) or "runs"
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"\n{'='*60}")
+    print("GENERATING GRAPHS FROM EXISTING RESULTS")
+    print(f"Input: {results_path}")
+    print(f"Output: {output_dir}")
+    print(f"{'='*60}\n")
+    
+    df = load_results_from_jsonl(results_path)
+    
+    if df.empty:
+        print("[ERROR] No results found in file.")
+        return
+    
+    print(f"Loaded {len(df)} results")
+    print(f"Columns: {list(df.columns)}")
+    
+    correct_count = int(df["correct"].sum()) if "correct" in df.columns else 0
+    incorrect_count = len(df) - correct_count
+    print(f"Correct: {correct_count} | Incorrect: {incorrect_count}\n")
+    
+    if "correct" not in df.columns:
+        print("[ERROR] 'correct' column not found in results.")
+        return
+    
+    print(f"\n{'='*60}")
+    print("AUROC ANALYSIS")
+    print(f"{'='*60}")
+    
+    if incorrect_count > 0 and correct_count > 0:
+        auroc_table = compute_all_auroc(df)
+        if not auroc_table.empty:
+            print(auroc_table.to_string())
+            auroc_table.to_csv(f"{output_dir}/auroc_analysis.csv")
+            print(f"\nSaved: {output_dir}/auroc_analysis.csv")
+        else:
+            print("Not enough data to compute AUROC.")
+    else:
+        print("AUROC requires both correct and incorrect examples.")
+    
+    print(f"\n{'='*60}")
+    print("CALIBRATION ANALYSIS")
+    print(f"{'='*60}")
+    cal_table = calibration_analysis(df)
+    if not cal_table.empty:
+        print(cal_table.to_string())
+        cal_table.to_csv(f"{output_dir}/calibration_table.csv")
+        print(f"\nSaved: {output_dir}/calibration_table.csv")
+    
+    print(f"\n{'='*60}")
+    print("GENERATING VISUALIZATIONS...")
+    print(f"{'='*60}")
+    
+    plot_roc_curves(df, f"{output_dir}/roc_curves.png")
+    plot_confidence_distributions(df, f"{output_dir}/confidence_distributions.png")
+    plot_calibration_curves(df, f"{output_dir}/calibration_curves.png")
+    
+    print(f"\n=== Graphs Complete ===")
+    print(f"All files saved to: {output_dir}/")
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--graph-only":
+    import sys
+    results_file = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    if results_file is None:
+        runs_dir = "runs"
+        if os.path.exists(runs_dir):
+            subdirs = sorted([d for d in os.listdir(runs_dir) if d.startswith("run_")])
+            if subdirs:
+                results_file = f"{runs_dir}/{subdirs[-1]}/results.jsonl"
+                print(f"Using latest run: {results_file}")
+            else:
+                print("[ERROR] No run directories found in runs/")
+                exit(1)
+        else:
+            print("[ERROR] runs/ directory not found")
+            exit(1)
+    
+    if os.path.exists(results_file):
+        output_dir = os.path.dirname(results_file) or "."
+        generate_graphs_from_results(results_file, output_dir)
+    else:
+        print(f"[ERROR] File not found: {results_file}")
+        exit(1)

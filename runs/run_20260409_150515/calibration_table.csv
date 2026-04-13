@@ -1,0 +1,5 @@
+Method,High-conf (n),High-conf acc,Low-conf (n),Low-conf acc
+Self-Consistency,43,48.8%,57,50.9%
+Token Probability,100,50.0%,0,N/A
+Entropy Confidence,100,50.0%,0,N/A
+Verbalized Confidence,9,66.7%,89,48.3%
