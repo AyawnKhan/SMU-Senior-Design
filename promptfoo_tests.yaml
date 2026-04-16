@@ -1,0 +1,235 @@
+tests:
+  - vars:
+      table: |
+        |  | amount ( in millions ) |
+        | 2014 net revenue | $ 5735 |
+        | retail electric price | 187 |
+        | volume/weather | 95 |
+        | waterford 3 replacement steam generator provision | -32 ( 32 ) |
+        | miso deferral | -35 ( 35 ) |
+        | louisiana business combination customer credits | -107 ( 107 ) |
+        | other | -14 ( 14 ) |
+        | 2015 net revenue | $ 5829 |
+      question: "what is the net change in net revenue during 2015 for entergy corporation?"
+      answer: "94"
+
+  - vars:
+      table: |
+        | ( square feet in millions ) | unitedstates | othercountries | total |
+        | owned facilities1 | 30.7 | 17.2 | 47.9 |
+        | leased facilities2 | 2.1 | 6.0 | 8.1 |
+        | total facilities | 32.8 | 23.2 | 56.0 |
+      question: "what percentage of total facilities as measured in square feet are leased?"
+      answer: "14%"
+
+  - vars:
+      table: |
+        | statement of income classification | statement of income loss on swaps | statement of income gain on note | statement of income net income effect | statement of income gain on swaps | loss on note | net income effect |
+        | other income | $ -4614 ( 4614 ) | $ 4614 | $ 2014 | $ 20692 | $ -20692 ( 20692 ) | $ 2014 |
+      question: "what is the percentage change in cash flow hedges in 2011 compare to the 2010?"
+      answer: "9.9%"
+
+  - vars:
+      table: |
+        | value of metavante common stock | $ 4066.4 |
+        | value of metavante stock awards | 121.4 |
+        | total purchase price | $ 4187.8 |
+      question: "what portion of total purchase price is related to stock awards?"
+      answer: "2.9%"
+
+  - vars:
+      table: |
+        |  | 2013 | 2014 | 2015 | 2016 | 2017 |
+        | masco | $ 138.48 | $ 155.26 | $ 200.79 | $ 227.08 | $ 318.46 |
+        | s&p 500 index | $ 132.04 | $ 149.89 | $ 151.94 | $ 169.82 | $ 206.49 |
+        | s&p industrials index | $ 140.18 | $ 153.73 | $ 149.83 | $ 177.65 | $ 214.55 |
+        | s&p consumer durables & apparel index | $ 135.84 | $ 148.31 | $ 147.23 | $ 138.82 | $ 164.39 |
+      question: "what was the difference in percentage cumulative total shareholder return on masco common stock versus the s&p 500 index for the five year period ended 2017?"
+      answer: ""
+
+  - vars:
+      table: |
+        |  | amount |
+        | 2007 | $ 56499000 |
+        | 2008 | 46899000 |
+        | 2009 | 39904000 |
+        | 2010 | 33329000 |
+        | 2011 | 25666000 |
+        | later years | 128981000 |
+      question: "what was the percentage change in total rental expense under operating leases from july 2 , 2005 to july 1 , 2006?"
+      answer: "7%"
+
+  - vars:
+      table: |
+        | december 31, | annual maturities ( in millions ) |
+        | 2011 | $ 463 |
+        | 2012 | 2014 |
+        | 2013 | 2014 |
+        | 2014 | 497 |
+        | 2015 | 500 |
+        | thereafter | 3152 |
+        | total recourse debt | $ 4612 |
+      question: "what percent of total recourse debt is current?"
+      answer: "10%"
+
+  - vars:
+      table: |
+        | $ in millions | as of december 2015 |
+        | 2016 | $ 317 |
+        | 2017 | 313 |
+        | 2018 | 301 |
+        | 2019 | 258 |
+        | 2020 | 226 |
+        | 2021 - thereafter | 1160 |
+        | total | $ 2575 |
+      question: "what percentage of future minimum rental payments are due in 2018?"
+      answer: "12%"
+
+  - vars:
+      table: |
+        | date | altria group inc . | altria group inc . peer group | s&p 500 |
+        | december 2011 | $ 100.00 | $ 100.00 | $ 100.00 |
+        | december 2012 | $ 111.77 | $ 108.78 | $ 115.99 |
+        | december 2013 | $ 143.69 | $ 135.61 | $ 153.55 |
+        | december 2014 | $ 193.28 | $ 151.74 | $ 174.55 |
+        | december 2015 | $ 237.92 | $ 177.04 | $ 176.94 |
+        | december 2016 | $ 286.61 | $ 192.56 | $ 198.09 |
+      question: "did altria outperform the s&p 500?"
+      answer: "yes"
+
+  - vars:
+      table: |
+        | ( in millions ) | 2015 | 2014 | 2013 |
+        | balance january 1 | $ 1171 | $ 1701 | $ 1573 |
+        | additions based on tax positions related to the current year | 67 | 63 | 90 |
+        | additions based on tax positions related to prior years | 98 | 111 | 201 |
+        | additions from acquired subsidiaries | 2014 | 2014 | 268 |
+        | reductions for tax positions of prior years | -84 ( 84 ) | -220 ( 220 ) | -141 ( 141 ) |
+        | reductions due to expiration of statutes of limitations | -41 ( 41 ) | -448 ( 448 ) | -3 ( 3 ) |
+        | settlements with tax authorities | -75 ( 75 ) | -36 ( 36 ) | -287 ( 287 ) |
+        | balance december 31 | $ 1136 | $ 1171 | $ 1701 |
+      question: "what was the change in unrecognized tax benefits from the end of 2014 to the end of 2015?"
+      answer: "-35"
+
+  - vars:
+      table: |
+        | ( in millions ) | 2007 | 2006 |
+        | indemnified securities financing | $ 558368 | $ 506032 |
+        | liquidity asset purchase agreements | 35339 | 30251 |
+        | unfunded commitments to extend credit | 17533 | 16354 |
+        | standby letters of credit | 4711 | 4926 |
+      question: "what is the growth rate in the balance of standby letters of credit from 2006 to 2007?"
+      answer: "-4.4%"
+
+  - vars:
+      table: |
+        | ( in thousands ) | at december 31 , 2016 | at december 31 , 2015 | at december 31 , 2014 | at december 31 , 2013 | at december 31 , 2012 |
+        | cash and cash equivalents | $ 250470 | $ 129852 | $ 593175 | $ 347489 | $ 341841 |
+        | working capital ( 1 ) | 1279337 | 1019953 | 1127772 | 702181 | 651370 |
+        | inventories | 917491 | 783031 | 536714 | 469006 | 319286 |
+        | total assets | 3644331 | 2865970 | 2092428 | 1576369 | 1155052 |
+        | total debt including current maturities | 817388 | 666070 | 281546 | 151551 | 59858 |
+        | total stockholders 2019 equity | $ 2030900 | $ 1668222 | $ 1350300 | $ 1053354 | $ 816922 |
+      question: "what is the debt-to-asset ratio?"
+      answer: "22.4%"
+
+  - vars:
+      table: |
+        | in millions | operating leases | capital leases |
+        | fiscal 2019 | $ 137.4 | $ 0.3 |
+        | fiscal 2020 | 115.7 | 0.2 |
+        | fiscal 2021 | 92.3 | - |
+        | fiscal 2022 | 70.9 | - |
+        | fiscal 2023 | 51.8 | - |
+        | after fiscal 2023 | 91.2 | - |
+        | total noncancelable future lease commitments | $ 559.3 | $ 0.5 |
+        | less : interest |  | -0.2 ( 0.2 ) |
+        | present value of obligations under capitalleases |  | $ 0.3 |
+      question: "what portion of the total noncancelable future lease commitments are due in fiscal year of 2019?"
+      answer: "24.6%"
+
+  - vars:
+      table: |
+        |  | 2014 | 2015 | 2016 | 2017 | 2018 | 2019 |
+        | jkhy | 100.00 | 110.51 | 151.12 | 182.15 | 231.36 | 240.29 |
+        | 2019 peer group | 100.00 | 126.23 | 142.94 | 166.15 | 224.73 | 281.09 |
+        | 2018 peer group | 100.00 | 127.40 | 151.16 | 177.26 | 228.97 | 286.22 |
+        | s&p 500 | 100.00 | 107.42 | 111.71 | 131.70 | 150.64 | 166.33 |
+      question: "was the five year total return of the 2019 peer group greater than the 2018 peer group?"
+      answer: "no"
+
+  - vars:
+      table: |
+        | balance at january 1 2013 | $ 180993 |
+        | increases in current period tax positions | 27229 |
+        | decreases in prior period measurement of tax positions | -30275 ( 30275 ) |
+        | balance at december 31 2013 | $ 177947 |
+        | increases in current period tax positions | 53818 |
+        | decreases in prior period measurement of tax positions | -36528 ( 36528 ) |
+        | balance at december 31 2014 | $ 195237 |
+      question: "what was the percentage change in deferred tax assets and regulatory assets from 2013 to 2014"
+      answer: "1.7%"
+
+  - vars:
+      table: |
+        | ( in millions ) | 2011 | 2010 | 2009 |
+        | sales and transfers of oil and gas produced net of production and administrative costs | $ -7922 ( 7922 ) | $ -6330 ( 6330 ) | $ -4876 ( 4876 ) |
+        | net changes in prices and production and administrative costs related to future production | 12313 | 9843 | 4840 |
+        | extensions discoveries and improved recovery less related costs | 1454 | 1268 | 1399 |
+        | development costs incurred during the period | 1899 | 2546 | 2786 |
+        | changes in estimated future development costs | -1349 ( 1349 ) | -2153 ( 2153 ) | -3773 ( 3773 ) |
+        | revisions of previous quantity estimates | 2526 | 1117 | 5110 |
+        | net changes in purchases and sales of minerals in place | 233 | -20 ( 20 ) | -159 ( 159 ) |
+        | accretion of discount | 2040 | 1335 | 787 |
+        | net change in income taxes | -6676 ( 6676 ) | -4231 ( 4231 ) | -4345 ( 4345 ) |
+        | timing and other | 130 | 250 | -149 ( 149 ) |
+        | net change for the year | 4648 | 3625 | 1620 |
+        | beginning of the year | 9280 | 5655 | 4035 |
+        | end of year | $ 13928 | $ 9280 | $ 5655 |
+      question: "what was the average net annual change in discounted future net cash flows ( in millions ) for the years 2011 , 2010 , and 2009?"
+      answer: "3298"
+
+  - vars:
+      table: |
+        |  | years |
+        | ships | 30 |
+        | ship improvements | 3-20 |
+        | buildings and improvements | 10-40 |
+        | computer hardware and software | 3-5 |
+        | transportation equipment and other | 3-30 |
+        | leasehold improvements | shorter of remaining lease term or useful life 3-30 |
+      question: "assuming each continent has the same number of destinations , approximately how many destinations does each continent have?"
+      answer: "65"
+
+  - vars:
+      table: |
+        |  | amount ( in millions ) |
+        | 2016 net revenue | $ 705.4 |
+        | volume/weather | -18.2 ( 18.2 ) |
+        | retail electric price | 13.5 |
+        | other | 2.4 |
+        | 2017 net revenue | $ 703.1 |
+      question: "what was the average net revenue between 2016 and 2017 in millions"
+      answer: "704.25"
+
+  - vars:
+      table: |
+        | beginning balance as of december 1 2007 | $ 201808 |
+        | gross increases in unrecognized tax benefits 2013 prior year tax positions | 14009 |
+        | gross increases in unrecognized tax benefits 2013 current year tax positions | 11350 |
+        | settlements with taxing authorities | -81213 ( 81213 ) |
+        | lapse of statute of limitations | -3512 ( 3512 ) |
+        | foreign exchange gains and losses | -2893 ( 2893 ) |
+        | ending balance as of november 28 2008 | $ 139549 |
+      question: "the combined amount of accrued interest and penalties related to tax positions taken on our tax returns and included in non-current income taxes payable was what percent of the total ending balance as of november 28 2008?"
+      answer: "11.0%"
+
+  - vars:
+      table: |
+        | year ended december 31 ( in millions ) | 2010 | 2009 | 2008 |
+        | u.s . | $ 16568 | $ 6263 | $ -2094 ( 2094 ) |
+        | non-u.s. ( a ) | 8291 | 9804 | 4867 |
+        | income before incometax expense/ ( benefit ) andextraordinary gain | $ 24859 | $ 16067 | $ 2773 |
+      question: "in 2010 and 2009 , what was the total fair value in billions of assets segregated for the benefit of securities and futures brokerage customers?"
+      answer: "68.9"
+
