@@ -1,0 +1,22 @@
+{
+  "run_timestamp": "20260409_150515",
+  "seed": 42,
+  "model": "gpt-4o-mini",
+  "accuracy": 0.5,
+  "mean_sc_confidence": 0.7366710000000001,
+  "mean_tp_confidence": 0.901928,
+  "mean_entropy_confidence": 0.883824,
+  "mean_vc_confidence": 0.3081632653061225,
+  "total_samples": 100,
+  "correct_count": 50,
+  "incorrect_count": 50,
+  "total_api_calls": 500,
+  "auroc_self-consistency": 0.5378,
+  "auprc_self-consistency": 0.5177,
+  "auroc_token_probability": 0.67,
+  "auprc_token_probability": 0.6691,
+  "auroc_entropy_confidence": 0.6568,
+  "auprc_entropy_confidence": 0.6594,
+  "auroc_verbalized_confidence": 0.4913,
+  "auprc_verbalized_confidence": 0.5318
+}

@@ -1,0 +1,5 @@
+Method,AUROC,AUPRC,Higher=Confident,Detection Ability
+Self-Consistency,0.5417,0.6238,True,Poor
+Token Probability,0.8333,0.8734,True,Good
+Entropy Confidence,0.9167,0.9583,True,Good
+Verbalized Confidence,0.5,0.7333,True,Poor
