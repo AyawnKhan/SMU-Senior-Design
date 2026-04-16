@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Callable
 @dataclass
 class LLMConfig:
     provider: str = "openai"          # "openai"
-    model: str = "gpt-o"       # change to other models as needed 
+    model: str = "gpt-4o-mini"  # change to other models as needed 
     temperature: float = 0.2
     max_tokens: int = 512
     top_p: float = 1.0
@@ -117,15 +117,17 @@ class SimpleDiskCache:
 #Retry / backoff
 
 def with_retries(fn: Callable[[], Dict[str, Any]], max_retries: int = 4) -> Dict[str, Any]:
+    last_exception = None
     for attempt in range(max_retries + 1):
         try:
             return fn()
         except Exception as e:
+            last_exception = e
             if attempt == max_retries:
-                raise
-            #exponential backoff + jitter
+                break
             sleep_s = (2 ** attempt) + random.random()
             time.sleep(sleep_s)
+    raise last_exception if last_exception else RuntimeError("with_retries failed")
 
 
 #Provider implementations
@@ -139,21 +141,18 @@ def call_openai_chat(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     from openai import OpenAI
     client = OpenAI()
 
-    #NOTE: The exact args depend on which OpenAI endpoint we use
-    #This wrapper is intentionally thin—adapt as needed.
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
     resp = client.chat.completions.create(
         model=cfg.model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        messages=messages,
         temperature=cfg.temperature,
-        top_p=cfg.top_p,
         max_tokens=cfg.max_tokens,
-        #seed=cfg.seed,  # if supported by your chosen model/endpoint
-        #timeout=cfg.timeout_s,  # if your client supports timeouts
     )
-    return resp.model_dump()  # nice serializable dict
+    return resp.model_dump()
 
 def call_mock(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     """
@@ -165,9 +164,40 @@ def call_mock(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
         "mock": True
     }
 
+def call_huggingface(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
+    from huggingface_hub import InferenceClient  # type: ignore
+    client = InferenceClient(token=os.environ.get("HF_API_KEY", ""))
+    resp = client.chat.completions.create(
+        model=cfg.model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+        temperature=cfg.temperature,
+        max_tokens=cfg.max_tokens,
+    )
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": resp.choices[0].message.content
+                },
+                "finish_reason": resp.choices[0].finish_reason,
+            }
+        ],
+        "usage": {
+            "prompt_tokens":     getattr(resp.usage, "prompt_tokens", 0),
+            "completion_tokens": getattr(resp.usage, "completion_tokens", 0),
+            "total_tokens":      getattr(resp.usage, "total_tokens", 0),
+        }
+    }
+
+
 def provider_call(system: str, user: str, cfg: LLMConfig) -> Dict[str, Any]:
     if cfg.provider == "openai":
         return call_openai_chat(system, user, cfg)
+    if cfg.provider == "huggingface":
+        return call_huggingface(system, user, cfg)
     if cfg.provider == "mock":
         return call_mock(system, user, cfg)
     raise ValueError(f"Unknown provider: {cfg.provider}")
