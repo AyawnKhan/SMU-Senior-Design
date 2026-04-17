@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -34,8 +35,26 @@ def normalize_answer(ans: str) -> str:
     return str(ans).strip().lower().replace(",", "")
 
 
+def _extract_numeric(text: str) -> str:
+    """
+    Extract the first numeric value from a verbose model answer.
+    Handles: '$94 million' → '94', '14.46%' → '14.46', '-5.2' → '-5.2'
+    """
+    import re
+    text = str(text).strip()
+    pct = re.search(r"[-+]?\d[\d,]*\.?\d*\s*%", text)
+    if pct:
+        return re.sub(r"[,% ]", "", pct.group())
+    num = re.search(r"[-+]?\d[\d,]*\.?\d*", text)
+    if num:
+        return re.sub(r",", "", num.group())
+    return normalize_answer(text)
+
+
 def is_correct(pred: str, gold: str) -> bool:
-    return normalize_answer(pred) == normalize_answer(gold)
+    gold_norm = re.sub(r"[,$% ]", "", gold.strip().lower())
+    pred_norm = _extract_numeric(pred)
+    return pred_norm == gold_norm
 
 
 def run_batch(

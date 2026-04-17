@@ -246,7 +246,7 @@ def table_to_text(table: Any) -> str:
                 lines.append(str(row))
         return "\n".join(lines).strip()
     return str(table).strip()
-
+5
 
 def normalize_answer(ans: Any) -> str:
     if ans is None:
