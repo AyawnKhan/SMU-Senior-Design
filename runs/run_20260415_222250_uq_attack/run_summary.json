@@ -1,0 +1,22 @@
+{
+  "run_timestamp": "20260415_222250",
+  "seed": 42,
+  "model": "gpt-4o-mini",
+  "n_questions": 100,
+  "n_attacks": 7,
+  "mode": "one_attack_per_question",
+  "total_rows": 200,
+  "clean_rows": 100,
+  "attacked_rows": 100,
+  "clean_accuracy": 0.05,
+  "attacked_accuracy": 0.03,
+  "accuracy_delta": -0.020000000000000004,
+  "clean_mean_sc_confidence": 0.0,
+  "attacked_mean_sc_confidence": 0.0,
+  "clean_mean_tp_confidence": 0.8729,
+  "attacked_mean_tp_confidence": 0.913,
+  "clean_mean_entropy_confidence": 0.8729,
+  "attacked_mean_entropy_confidence": 0.913,
+  "clean_mean_vc_confidence_guarded": 0.3071,
+  "attacked_mean_vc_confidence_guarded": 0.3072
+}
